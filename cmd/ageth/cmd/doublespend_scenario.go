@@ -30,47 +30,47 @@ type finalReport struct {
 }
 
 func stabilize(nodes *agethSet) {
-  badGuy := nodes.indexed(0) // NOTE: Assumes badguy will always be [0]
-  goodGuys := nodes.where(func(a *ageth) bool { return a.name != badGuy.name })
-  if headMax := goodGuys.headMax(); headMax > 0 {
-    badGuy.truncateHead(headMax)
-  }
-  minimumPeerCount := int64(2)
-  nodes.eachParallel(func (node *ageth) {
-    node.stopMining()
-    var result interface{}
-    node.client.Call(&result, "admin_maxPeers", 20)
-    go func() {
-      for node.getPeerCount() < minimumPeerCount {
-        node.addPeer(nodes.random())
-      }
-    }()
-  })
-  done := make(chan struct{})
-  distinct := len(nodes.distinctChains())
-  go func() {
-    for {
-      select {
-      case <-done:
-        return
-      case <-time.NewTimer(30 * time.Second).C:
-        log.Info("Still stabilizing", "distinctChains", distinct, "badGuyBlock", badGuy.block().number, "goodGuysBlock", goodGuys.headMax() )
-      }
-    }
-  }()
-  goodGuys.random().startMining(13)
-  log.Info("Started somebody mining")
-  for distinct > 1 {
-    log.Info("Multiple distinct chains", "count", distinct)
-    time.Sleep(30 * time.Second)
-    distinct = len(nodes.distinctChains())
-  }
-  log.Info("Single chain")
-  for badGuy.block().number < goodGuys.headMax() {
-    time.Sleep(5 * time.Second)
-  }
-  log.Info("Attacker caught up")
-  done <- struct{}{}
+	badGuy := nodes.indexed(0) // NOTE: Assumes badguy will always be [0]
+	goodGuys := nodes.where(func(a *ageth) bool { return a.name != badGuy.name })
+	if headMax := goodGuys.headMax(); headMax > 0 {
+		badGuy.truncateHead(headMax)
+	}
+	minimumPeerCount := int64(2)
+	nodes.eachParallel(func(node *ageth) {
+		node.stopMining()
+		var result interface{}
+		node.client.Call(&result, "admin_maxPeers", 20)
+		go func() {
+			for node.getPeerCount() < minimumPeerCount {
+				node.addPeer(nodes.random())
+			}
+		}()
+	})
+	done := make(chan struct{})
+	distinct := len(nodes.distinctChains())
+	go func() {
+		for {
+			select {
+			case <-done:
+				return
+			case <-time.NewTimer(30 * time.Second).C:
+				log.Info("Still stabilizing", "distinctChains", distinct, "badGuyBlock", badGuy.block().number, "goodGuysBlock", goodGuys.headMax())
+			}
+		}
+	}()
+	goodGuys.random().startMining(13)
+	log.Info("Started somebody mining")
+	for distinct > 1 {
+		log.Info("Multiple distinct chains", "count", distinct)
+		time.Sleep(30 * time.Second)
+		distinct = len(nodes.distinctChains())
+	}
+	log.Info("Single chain")
+	for badGuy.block().number < goodGuys.headMax() {
+		time.Sleep(5 * time.Second)
+	}
+	log.Info("Attacker caught up")
+	done <- struct{}{}
 }
 func stabilize2(nodes *agethSet) {
 	log.Warn("Stabilizing network")
@@ -147,15 +147,17 @@ func scenarioGenerator(blockTime int, attackDuration, stabilizeDuration time.Dur
 	return func(nodes *agethSet) {
 		// Setup
 
-    // Start all nodes mining at 150% of the blocktime. They will be the long tail of small miners.
-    for i, node := range nodes.all() {
-      node.startMining(blockTime * 3 / 2)
-      if i > int(float64(len(nodes.all())) * miningRatio) { break }
-    }
-    bigMiners := newAgethSet()
-    healthyNodes := nodes.where(func(a *ageth) bool { return a.peers.len() > 12 })
-    badGuy := nodes.indexed(0) // NOTE: Assumes badguy will always be [0]
-    goodGuys := nodes.where(func(a *ageth) bool { return a.name != badGuy.name })
+		// Start all nodes mining at 150% of the blocktime. They will be the long tail of small miners.
+		for i, node := range nodes.all() {
+			node.startMining(blockTime * 3 / 2)
+			if i > int(float64(len(nodes.all()))*miningRatio) {
+				break
+			}
+		}
+		bigMiners := newAgethSet()
+		healthyNodes := nodes.where(func(a *ageth) bool { return a.peers.len() > 12 })
+		badGuy := nodes.indexed(0) // NOTE: Assumes badguy will always be [0]
+		goodGuys := nodes.where(func(a *ageth) bool { return a.name != badGuy.name })
 
 		// Try hard to maintain minimum number of peers.
 		// But not for the bad guy.
@@ -238,10 +240,13 @@ func scenarioGenerator(blockTime int, attackDuration, stabilizeDuration time.Dur
 			if bestPeer.getTd().Cmp(forkBlockTd) <= 0 {
 				continue
 			}
-			chainRatio := big.NewFloat(0).Quo(
-				big.NewFloat(0).SetInt(big.NewInt(0).Sub(badGuy.getTd(), forkBlockTd)),
-				big.NewFloat(0).SetInt(big.NewInt(0).Sub(bestPeer.getTd(), forkBlockTd)),
-			)
+			goodGuySegmentDifficulty := big.NewFloat(0).SetInt(big.NewInt(0).Sub(bestPeer.getTd(), forkBlockTd))
+			var chainRatio *big.Float
+			if goodGuySegmentDifficulty.Cmp(big.NewFloat(0)) == 0 {
+				chainRatio = big.NewFloat(1)
+			} else {
+				chainRatio = big.NewFloat(0).Quo(big.NewFloat(0).SetInt(big.NewInt(0).Sub(badGuy.getTd(), forkBlockTd)), goodGuySegmentDifficulty)
+			}
 			if chainRatio.Cmp(lastChainRatio) != 0 {
 				// The ratio has changed, adjust mining power
 				if chainRatio.Cmp(big.NewFloat(targetDifficultyRatio)) < 0 {
