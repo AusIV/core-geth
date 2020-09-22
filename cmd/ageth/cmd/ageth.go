@@ -590,6 +590,11 @@ func (a *ageth) addPeer(b *ageth) {
 		a.log.Error("admin_addPeer", "error", err, "enode", translatedIP)
 		return
 	}
+	err = b.client.Call(&ok, "admin_addPeer", translateEnodeIPIfLocal(a.enode))
+	if err != nil {
+		a.log.Error("admin_addPeer", "error", err, "enode", translatedIP)
+		return
+	}
 	if !a.peers.push(b) {
 		return
 	}

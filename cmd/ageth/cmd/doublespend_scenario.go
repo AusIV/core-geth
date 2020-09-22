@@ -16,6 +16,7 @@ import (
 	log "github.com/ethereum/go-ethereum/log"
 )
 
+
 type finalReport struct {
 	Converted             int
 	Unconverted           int
@@ -28,6 +29,49 @@ type finalReport struct {
 	AttackerHash          common.Hash
 }
 
+func stabilize(nodes *agethSet) {
+  badGuy := nodes.indexed(0) // NOTE: Assumes badguy will always be [0]
+  goodGuys := nodes.where(func(a *ageth) bool { return a.name != badGuy.name })
+  if headMax := goodGuys.headMax(); headMax > 0 {
+    badGuy.truncateHead(headMax)
+  }
+  minimumPeerCount := int64(2)
+  nodes.eachParallel(func (node *ageth) {
+    node.stopMining()
+    var result interface{}
+    node.client.Call(&result, "admin_maxPeers", 20)
+    go func() {
+      for node.getPeerCount() < minimumPeerCount {
+        node.addPeer(nodes.random())
+      }
+    }()
+  })
+  done := make(chan struct{})
+  distinct := len(nodes.distinctChains())
+  go func() {
+    for {
+      select {
+      case <-done:
+        return
+      case <-time.NewTimer(30 * time.Second).C:
+        log.Info("Still stabilizing", "distinctChains", distinct, "badGuyBlock", badGuy.block().number, "goodGuysBlock", goodGuys.headMax() )
+      }
+    }
+  }()
+  goodGuys.random().startMining(13)
+  log.Info("Started somebody mining")
+  for distinct > 1 {
+    log.Info("Multiple distinct chains", "count", distinct)
+    time.Sleep(30 * time.Second)
+    distinct = len(nodes.distinctChains())
+  }
+  log.Info("Single chain")
+  for badGuy.block().number < goodGuys.headMax() {
+    time.Sleep(5 * time.Second)
+  }
+  log.Info("Attacker caught up")
+  done <- struct{}{}
+}
 func stabilize2(nodes *agethSet) {
 	log.Warn("Stabilizing network")
 	defer func() {
@@ -98,66 +142,20 @@ func stabilize2(nodes *agethSet) {
 	<-done
 }
 
-func stabilize(nodes *agethSet) {
-	defer func() {
-		log.Info("Done stabilizing")
-	}()
-	badGuy := nodes.indexed(0) // NOTE: Assumes badguy will always be [0]
-	goodGuys := nodes.where(func(a *ageth) bool { return a.name != badGuy.name })
-	badGuy.truncateHead(goodGuys.headMin())
-	if !badGuy.sameChainAs(goodGuys.random()) {
-		badGuy.truncateHead(0)
-	}
-	minimumPeerCount := int64(2)
-	nodes.eachParallel(func(node *ageth) {
-		node.stopMining()
-		var result interface{}
-		node.client.Call(&result, "admin_maxPeers", 25)
-		for node.getPeerCount() < minimumPeerCount {
-			node.addPeer(nodes.random())
-		}
-		var res bool
-		node.client.Call(&res, "admin_ecbp1100", hexutil.Uint64(9999999999).String())
-	})
-	done := make(chan struct{})
-	go func() {
-		for {
-			select {
-			case <-done:
-				return
-			case <-time.NewTimer(30 * time.Second).C:
-				log.Info("Still stabilizing", "distinctChains", len(nodes.distinctChains()), "badGuyBlock", badGuy.block().number, "goodGuysBlock", goodGuys.headMax())
-			}
-		}
-	}()
-	goodGuys.random().startMining(100)
-	for len(nodes.distinctChains()) > 1 {
-		time.Sleep(30)
-	}
-	for badGuy.syncing() {
-		time.Sleep(5)
-	}
-	nodes.eachParallel(func(a *ageth) {
-		var res bool
-		a.client.Call(&res, "admin_ecbp1100", hexutil.Uint64(1).String())
-	})
-	done <- struct{}{}
-}
 
-func scenarioGenerator(blockTime int, attackDuration, stabilizeDuration time.Duration, targetDifficultyRatio, miningPeersRatio, ecbp1100ratio float64, attackerShouldWin bool) func(*agethSet) {
+func scenarioGenerator(blockTime int, attackDuration, stabilizeDuration time.Duration, targetDifficultyRatio, miningRatio, ecbp1100ratio float64, attackerShouldWin bool) func(*agethSet) {
 	return func(nodes *agethSet) {
 		// Setup
 
-		// Start all nodes mining at 150% of the blocktime. They will be the long tail of small miners.
-		for i, node := range nodes.all() {
-			node.startMining(blockTime * 3 / 2)
-			if i > int(float64(len(nodes.all()))*miningPeersRatio) {
-				break
-			}
-		}
-		bigMiners := newAgethSet()
-		badGuy := nodes.indexed(0) // NOTE: Assumes badguy will always be [0]
-		goodGuys := nodes.where(func(a *ageth) bool { return a.name != badGuy.name })
+    // Start all nodes mining at 150% of the blocktime. They will be the long tail of small miners.
+    for i, node := range nodes.all() {
+      node.startMining(blockTime * 3 / 2)
+      if i > int(float64(len(nodes.all())) * miningRatio) { break }
+    }
+    bigMiners := newAgethSet()
+    healthyNodes := nodes.where(func(a *ageth) bool { return a.peers.len() > 12 })
+    badGuy := nodes.indexed(0) // NOTE: Assumes badguy will always be [0]
+    goodGuys := nodes.where(func(a *ageth) bool { return a.name != badGuy.name })
 
 		// Try hard to maintain minimum number of peers.
 		// But not for the bad guy.
@@ -183,9 +181,9 @@ func scenarioGenerator(blockTime int, attackDuration, stabilizeDuration time.Dur
 		// Simulate the small proportion of "whale" miners, whose block times will be nearer the target time.
 		hashtimes := []int{blockTime, blockTime * 12 / 10, blockTime * 12 / 10, blockTime * 14 / 10, blockTime * 14 / 10}
 		for _, hashtime := range hashtimes {
-			nextMiner := nodes.random()
+			nextMiner := healthyNodes.random()
 			for nextMiner.name == badGuy.name || bigMiners.contains(nextMiner) {
-				nextMiner = nodes.random()
+				nextMiner = healthyNodes.random()
 			}
 			bigMiners.push(nextMiner)
 			nextMiner.startMining(hashtime)

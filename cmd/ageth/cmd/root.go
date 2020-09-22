@@ -145,6 +145,7 @@ type scenario func(nodes *agethSet)
 
 // "Global"s, don't touch.
 var world = newAgethSet()
+var globalTick = 0
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -260,41 +261,38 @@ to quickly create a Cobra application.`,
 		}
 
 		scenarios := []scenario{
-			// generateScenarioPartitioning(false, 20*60*time.Second, 40*60*time.Second),
-			// generateScenarioPartitioning(false, 20*60*time.Second, 40*60*time.Second),
-			// generateScenarioPartitioning(false, 20*60*time.Second, 40*60*time.Second),
-
-			// generateScenarioPartitioning(true, 10*60*time.Second, 20*60*time.Second),
-			// generateScenarioPartitioning(true, 10*60*time.Second, 20*60*time.Second),
-			// generateScenarioPartitioning(true, 10*60*time.Second, 20*60*time.Second),
-
-
-			// generateScenarioPartitioning(true, 45*time.Minute),
-
-			// scenarioGenerator(13, 15 * time.Minute, 2 * time.Minute, 1.06, .666, 1, false),
-			// scenarioGenerator(13, 15 * time.Minute, 2 * time.Minute, 1.20, .666, 1, false),
-
-			scenarioGenerator(13, 10 * time.Minute, 2 * time.Minute, 1.13, .666, 1, true),
-			// scenarioGenerator(13, 10 * time.Minute, 2 * time.Minute, 1.02, .666, 1, false), // 24
+			// // Minutes: 10 DifficultyRatio":1.154704968238843,"TargetDifficultyRatio":1.2,"AttackerShouldWin":true,"AttackerWon":false
+			scenarioGenerator(13, 11 * time.Minute, 2 * time.Minute, 1.2, .666, 1, true),
+			// // Minutes: 10 DifficultyRatio":1.030174512540185,"TargetDifficultyRatio":1.02,"AttackerShouldWin":false,"AttackerWon":false,
+			scenarioGenerator(13, 11 * time.Minute, 2 * time.Minute, 1.02, .666, 1, false), // 24
 			//
-			// scenarioGenerator(13, 34 * time.Minute, 10 * time.Minute, 1.55, .666, 1, true),
+			//
+			// // Minutes: 34 DifficultyRatio":1.577102118284136,"TargetDifficultyRatio":1.6,"AttackerShouldWin":true,"AttackerWon":false
+			scenarioGenerator(13, 34 * time.Minute, 5 * time.Minute, 1.65, .666, 1, true),
+			// Minutes: 34 DifficultyRatio":1.3969692392300614,"TargetDifficultyRatio":1.4,"AttackerShouldWin":false,"AttackerWon":true,
+			scenarioGenerator(13, 34 * time.Minute, 5 * time.Minute, 1.4, .666, 1, false), // 88 + 24 = 102
+			// scenarioGenerator(13, 34 * time.Minute, 5 * time.Minute, 1.4, .666, 1, false), // 88 + 24 = 102
+			// scenarioGenerator(13, 34 * time.Minute, 5 * time.Minute, 1.4, .666, 1, false), // 88 + 24 = 102
 
-
-			// scenarioGenerator(13, 34 * time.Minute, 10 * time.Minute, 1.4, .666, 1, false), // 88 + 24 = 102
+			// // Minutes: 49 DifficultyRatio":2.2049649899555877,"TargetDifficultyRatio":2.2,"AttackerShouldWin":true,"AttackerWon":false
+			scenarioGenerator(13, 46 * time.Minute, 5 * time.Minute, 2.2, .666, 1, true),
+			scenarioGenerator(13, 46 * time.Minute, 5 * time.Minute, 1.8, .666, 1, false),
 			//
-			// // scenarioGenerator(13, 49 * time.Minute, 10 * time.Minute, 2.1, .666, 1, true),
-			// scenarioGenerator(13, 49 * time.Minute, 10 * time.Minute, 1.8, .666, 1, false),
+			scenarioGenerator(13, 66 * time.Minute, 5 * time.Minute, 3.2, .666, 1, true),
+			scenarioGenerator(13, 66 * time.Minute, 5 * time.Minute, 2.8, .666, 1, false),
 			//
-			// scenarioGenerator(13, 70 * time.Minute, 10 * time.Minute, 3.14, .666, 1, true),
-			// scenarioGenerator(13, 70 * time.Minute, 10 * time.Minute, 2.8, .666, 1, false),
+			scenarioGenerator(13, 82 * time.Minute, 5 * time.Minute, 4.2, .666, 1, true),
+			scenarioGenerator(13, 82 * time.Minute, 5 * time.Minute, 3.8, .666, 1, false),
 			//
-			// scenarioGenerator(13, 86 * time.Minute, 10 * time.Minute, 4.15, .666, 1, true),
-			// scenarioGenerator(13, 86 * time.Minute, 10 * time.Minute, 3.8, .666, 1, false),
-			//
-			// scenarioGenerator(13, 100 * time.Minute, 10 * time.Minute, 5.17, .666, 1, true),
-			// scenarioGenerator(13, 100 * time.Minute, 10 * time.Minute, 4.8, .666, 1, false),
+			scenarioGenerator(13, 96 * time.Minute, 5 * time.Minute, 5.25, .666, 1, true),
+			scenarioGenerator(13, 96 * time.Minute, 5 * time.Minute, 4.8, .666, 1, false),
 
 		}
+
+		// Comment me to run the test(s).
+		// Leave me to use ageth as just an observer.
+		// q := make(chan struct{})
+		// <-q
 
 		for i, s := range scenarios {
 			log.Info("Running scenario", "index", i, "scenarios.len", len(scenarios),
